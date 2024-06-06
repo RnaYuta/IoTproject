@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "901972873197",
+    "firebase_url": "https://raum-4c8cc-default-rtdb.firebaseio.com",
+    "project_id": "raum-4c8cc",
+    "storage_bucket": "raum-4c8cc.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:901972873197:android:7ac2a566de70f48fcfe1e4",
+        "android_client_info": {
+          "package_name": "com.example.arduino_programming"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEFuNDwQslC2mP-Z_N-dbKQHC3vQf2tMM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

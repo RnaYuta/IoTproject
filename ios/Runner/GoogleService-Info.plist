@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDUqdRs0gU-YIyLXD9jb2pMXzXYB5Wo7f0</string>
+	<key>GCM_SENDER_ID</key>
+	<string>901972873197</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.arduinoProgramming</string>
+	<key>PROJECT_ID</key>
+	<string>raum-4c8cc</string>
+	<key>STORAGE_BUCKET</key>
+	<string>raum-4c8cc.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:901972873197:ios:12bbe10bd51c99d1cfe1e4</string>
+	<key>DATABASE_URL</key>
+	<string>https://raum-4c8cc-default-rtdb.firebaseio.com</string>
+</dict>
+</plist>
