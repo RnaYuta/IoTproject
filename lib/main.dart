@@ -3,12 +3,33 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// 로컬 알림 플러그인 초기화
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 알림 초기화
+  const AndroidInitializationSettings initializationSettingsAndroid =
+  AndroidInitializationSettings('@mipmap/ic_launcher');
+  const IOSInitializationSettings initializationSettingsIOS =
+  IOSInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsIOS,
+  );
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
   runApp(MyApp());
 }
 
@@ -44,7 +65,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
   bool ledTrigger = false;
   bool currentFan = false;
   bool currentHeater = false;
-  bool currentHumidifier = false;
 
   TimeOfDay? ledStartTime;
   TimeOfDay? ledEndTime;
@@ -53,6 +73,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
   TextEditingController humidityController = TextEditingController();
 
   final DatabaseReference databaseReference = FirebaseDatabase.instance.ref();
+
+  bool hasLowWaterAlertBeenShown = false;
 
   @override
   void initState() {
@@ -91,7 +113,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
     });
 
     // 토양 습도 가져오기
-    databaseReference.child('humidity_GND').onValue.listen((DatabaseEvent event) {
+    databaseReference.child('soilMoisture').onValue.listen((DatabaseEvent event) {
       final data = event.snapshot.value;
       setState(() {
         soilMoisture = data != null ? double.parse(data.toString()) : 40.0;
@@ -106,6 +128,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
       setState(() {
         double waterLevel = data != null ? double.parse(data.toString()) : 0.75;
         currentWaterLevel = waterLevel.clamp(0.0, 1.0);
+
+        if (currentWaterLevel < 0.1 && !hasLowWaterAlertBeenShown) {
+          _showLowWaterLevelAlert();
+          _showNotification();
+          hasLowWaterAlertBeenShown = true;
+        } else if (currentWaterLevel >= 0.1) {
+          hasLowWaterAlertBeenShown = false;
+        }
       });
     }, onError: (error) {
       print('Error getting water gauge from database: $error');
@@ -129,16 +159,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
       });
     }, onError: (error) {
       print('Error getting heater status from database: $error');
-    });
-
-    // 가습기 상태 가져오기
-    databaseReference.child('current_humidifier').onValue.listen((DatabaseEvent event) {
-      final data = event.snapshot.value;
-      setState(() {
-        currentHumidifier = data != null ? data as bool : false;
-      });
-    }, onError: (error) {
-      print('Error getting humidifier status from database: $error');
     });
 
     // LED 트리거 상태 가져오기
@@ -203,6 +223,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   void updateSettings(bool isTemperature) {
+    FocusScope.of(context).unfocus(); // 키보드 숨기기
     if (isTemperature) {
       double newTargetTemperature = double.tryParse(temperatureController.text) ?? targetTemperature;
       if (newTargetTemperature > 50) {
@@ -327,6 +348,47 @@ class _MonitoringPageState extends State<MonitoringPage> {
     );
   }
 
+  void _showLowWaterLevelAlert() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('경고'),
+          content: Text('물이 얼마 남지 않았습니다.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('확인'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showNotification() async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    AndroidNotificationDetails(
+      'your_channel_id',
+      'your_channel_name',
+      channelDescription: 'your_channel_description',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+    const NotificationDetails platformChannelSpecifics =
+    NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      '물통 알림',
+      '물이 얼마 남지 않았습니다.',
+      platformChannelSpecifics,
+      payload: 'item x',
+    );
+  }
+
   Widget sensorBox(String label, String value) {
     return Expanded(
       child: Container(
@@ -347,8 +409,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(label, style: TextStyle(color: Colors.blue, fontWeight: FontWeight.normal, fontSize: 20)),
-            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text(label,
+                style: TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.normal,
+                    fontSize: 20)),
+            Text(value,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -360,7 +427,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('물통', style: TextStyle(fontWeight: FontWeight.w100, fontSize: 20,)),
+          Text(
+            '물통',
+            style: TextStyle(
+              fontWeight: FontWeight.w100,
+              fontSize: 20,
+            ),
+          ),
           SizedBox(height: 8),
           Stack(
             children: <Widget>[
@@ -377,7 +450,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 child: Center(
                   child: Text(
                     '${(currentWaterLevel * 100).clamp(0, 100).toInt()}%', // 클램프 추가
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 30),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 30),
                   ),
                 ),
               ),
@@ -407,7 +483,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(label, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(label,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             SizedBox(height: 10),
             Icon(
               Icons.circle,
@@ -433,7 +510,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('스마트 사육장', style: TextStyle(fontFamily: 'baemin', fontSize: 40),),
+        title: Text(
+          '스마트 사육장',
+          style: TextStyle(fontFamily: 'baemin', fontSize: 40),
+        ),
         actions: <Widget>[
           IconButton(
             icon: Icon(Icons.menu),
@@ -441,113 +521,127 @@ class _MonitoringPageState extends State<MonitoringPage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Text("현재 상태", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w100),),
-              ],
-            ),
-            SizedBox(height: 10,),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: <Widget>[
-                sensorBox("온도 (섭씨)", "$currentTemperature도"),
-                sensorBox("공기 습도", "$currentHumidity%"),
-                sensorBox("토양 습도", "$soilMoisture%"),
-              ],
-            ),
-            SizedBox(height: 30),
-            waterLevelIndicator(),
-            SizedBox(height: 10),
-            Column(
-              children: <Widget>[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: <Widget>[
-                    actuatorIndicator("팬", currentFan),
-                    actuatorIndicator("히터", currentHeater),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: <Widget>[
-                    actuatorIndicator("가습기", currentHumidifier),
-                    actuatorIndicator("LED", ledTrigger),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: 40),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: temperatureController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: '목표 온도 설정 (섭씨)',
-                      border: OutlineInputBorder(),
-                    ),
-                    style: TextStyle(fontSize: 20),
+      body: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus(); // 화면을 터치하면 키보드 숨기기
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text(
+                    "현재 상태",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w100),
                   ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () => updateSettings(true),
-                  child: Text('설정 저장', style: TextStyle(fontSize: 18)),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: humidityController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: '목표 습도 설정 (%)',
-                      border: OutlineInputBorder(),
-                    ),
-                    style: TextStyle(fontSize: 20),
+                ],
+              ),
+              SizedBox(
+                height: 10,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: <Widget>[
+                  sensorBox("온도 (섭씨)", "$currentTemperature도"),
+                  sensorBox("공기 습도", "$currentHumidity%"),
+                  sensorBox("토양 습도", "$soilMoisture%"),
+                ],
+              ),
+              SizedBox(height: 30),
+              waterLevelIndicator(),
+              SizedBox(height: 10),
+              Column(
+                children: <Widget>[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: <Widget>[
+                      actuatorIndicator("LED", ledTrigger),
+                    ],
                   ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () => updateSettings(false),
-                  child: Text('설정 저장', style: TextStyle(fontSize: 18)),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text("LED 상태", style: TextStyle(fontSize: 20)),
-                Switch(
-                  value: ledTrigger,
-                  onChanged: _toggleLED,
-                ),
-                SizedBox(width: 30,),
-                Text("ON", style: TextStyle(fontSize: 20)),
-                TextButton(
-                  onPressed: () => _selectTime(context, true),
-                  child: Text(ledStartTime != null ? ledStartTime!.format(context) : '설정'),
-                ),
-                Text("OFF", style: TextStyle(fontSize: 20)),
-                TextButton(
-                  onPressed: () => _selectTime(context, false),
-                  child: Text(ledEndTime != null ? ledEndTime!.format(context) : '설정'),
-                )],
-            ),
-            SizedBox(height: 30),
-          ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: <Widget>[
+                      actuatorIndicator("팬", currentFan),
+                      actuatorIndicator("히터", currentHeater),
+                    ],
+                  ),
+                ],
+              ),
+              SizedBox(height: 40),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: temperatureController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: '목표 온도 설정 (섭씨)',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: TextStyle(fontSize: 20),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => updateSettings(true),
+                    child: Text('설정 저장', style: TextStyle(fontSize: 18)),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: humidityController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: '목표 습도 설정 (%)',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: TextStyle(fontSize: 20),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => updateSettings(false),
+                    child: Text('설정 저장', style: TextStyle(fontSize: 18)),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Text("LED 상태", style: TextStyle(fontSize: 20)),
+                  Switch(
+                    value: ledTrigger,
+                    onChanged: _toggleLED,
+                  ),
+                  SizedBox(
+                    width: 30,
+                  ),
+                  Text("ON", style: TextStyle(fontSize: 20)),
+                  TextButton(
+                    onPressed: () => _selectTime(context, true),
+                    child: Text(ledStartTime != null
+                        ? ledStartTime!.format(context)
+                        : '설정'),
+                  ),
+                  Text("OFF", style: TextStyle(fontSize: 20)),
+                  TextButton(
+                    onPressed: () => _selectTime(context, false),
+                    child: Text(
+                        ledEndTime != null ? ledEndTime!.format(context) : '설정'),
+                  )
+                ],
+              ),
+              SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );
