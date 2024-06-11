@@ -1,0 +1,13 @@
+{
+  "current_fan": true,
+  "current_heater": true,
+  "humidity": 68,
+  "led_end_time": "21:25",
+  "led_start_time": "04:22",
+  "led_trigger": true,
+  "soilMoisture": 69,
+  "target_humidity": 60,
+  "target_temp": 24,
+  "temp": 23,
+  "water_gauge": -0.35
+}
